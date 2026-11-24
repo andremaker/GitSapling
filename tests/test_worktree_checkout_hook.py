@@ -42,7 +42,7 @@ def create_primary_worktree(temporary_path: Path) -> tuple[Path, Path, Path]:
     shutil.copytree(LIBRARY_DIRECTORY, tool_directory)
 
     (primary_worktree / ".gitignore").write_text(
-        "/.env\n/shared-data/\n/external-link\n/internal-link\n",
+        "/.env\n/shared-data/\n/external-link\n/internal-link\n/.vscode/\n",
         encoding="utf-8",
     )
     (primary_worktree / ".worktreeinclude").write_text(
@@ -51,9 +51,15 @@ def create_primary_worktree(temporary_path: Path) -> tuple[Path, Path, Path]:
         encoding="utf-8",
     )
     (primary_worktree / ".worktreelinks").write_text(
-        "/shared-data/\n/outside-link\n/outside-shared/\n", encoding="utf-8"
+        "/shared-data/\n/outside-link\n/outside-shared/\n"
+        "/.vscode/settings.json\n",
+        encoding="utf-8",
     )
     (primary_worktree / ".env").write_text("local config\n", encoding="utf-8")
+    vscode_directory = primary_worktree / ".vscode"
+    vscode_directory.mkdir()
+    (vscode_directory / "settings.json").write_text("{}\n", encoding="utf-8")
+    (vscode_directory / "extensions.json").write_text("unlisted VS Code config\n", encoding="utf-8")
     (primary_worktree / "outside.txt").write_text("unignored outside file\n", encoding="utf-8")
     (primary_worktree / "outside-link").symlink_to("shared-data/asset.txt")
     outside_shared = primary_worktree / "outside-shared"
@@ -140,6 +146,15 @@ class WorktreeCheckoutHookTest(TemporaryDirectoryTestCase):
         self.assertFalse((target_worktree / "external-link").is_symlink())
         self.assertFalse((target_worktree / "internal-link").exists())
         self.assertFalse((target_worktree / "internal-link").is_symlink())
+
+        linked_vscode_settings = target_worktree / ".vscode/settings.json"
+        self.assertTrue(linked_vscode_settings.is_symlink())
+        self.assertEqual(
+            str(self.primary_worktree / ".vscode/settings.json"),
+            str(linked_vscode_settings.resolve()),
+        )
+        self.assertFalse((target_worktree / ".vscode").is_symlink())
+        self.assertFalse((target_worktree / ".vscode/extensions.json").exists())
 
         linked_shared_data = target_worktree / "shared-data"
         self.assertTrue(linked_shared_data.is_symlink())

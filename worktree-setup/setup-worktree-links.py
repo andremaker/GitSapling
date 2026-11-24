@@ -10,6 +10,28 @@ import sys
 from pathlib import Path
 
 
+def configured_directory_paths(source_root: Path, patterns_file: Path) -> list[str]:
+    directories = set()
+    for raw_pattern in patterns_file.read_text(encoding="utf-8").splitlines():
+        pattern = raw_pattern.strip()
+        if not pattern or pattern.startswith("#") or pattern.startswith("!"):
+            continue
+        if pattern.endswith("/**"):
+            pattern = pattern[:-2]
+        elif not pattern.endswith("/"):
+            continue
+
+        pattern = pattern.lstrip("/").rstrip("/")
+        if not pattern:
+            continue
+        if "/" not in pattern:
+            pattern = f"**/{pattern}"
+        for path in source_root.glob(pattern):
+            if path.is_dir() and not path.is_symlink():
+                directories.add(f"{path.relative_to(source_root).as_posix()}/")
+    return sorted(directories)
+
+
 def ignored_paths(source_root: Path, patterns_file: Path) -> list[str]:
     list_command = [
         "git",
@@ -18,14 +40,15 @@ def ignored_paths(source_root: Path, patterns_file: Path) -> list[str]:
         "ls-files",
         "--others",
         "--ignored",
-        "--directory",
         "-z",
         f"--exclude-from={patterns_file}",
     ]
     output = subprocess.check_output(list_command)
-    candidates = [os.fsdecode(path) for path in output.split(b"\0") if path]
+    candidates = {os.fsdecode(path) for path in output.split(b"\0") if path}
+    candidates.update(configured_directory_paths(source_root, patterns_file))
     if not candidates:
         return []
+    candidates = sorted(candidates)
 
     check_command = [
         "git",
