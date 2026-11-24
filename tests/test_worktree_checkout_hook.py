@@ -193,6 +193,21 @@ class WorktreeCheckoutHookTest(TemporaryDirectoryTestCase):
         self.assertFalse((target_worktree / ".env").exists())
         self.assertFalse((target_worktree / "shared-data").is_symlink())
 
+    def test_checkout_hook_skips_branch_switch(self) -> None:
+        installer = install_hook(self.primary_worktree)
+        self.assertEqual(0, installer.returncode, installer.stderr)
+
+        target_worktree = self.temporary_path / "branch switch worktree"
+        add_detached_worktree(self.primary_worktree, target_worktree)
+        (target_worktree / ".env").unlink()
+        (target_worktree / "shared-data").unlink()
+
+        branch_checkout = git(target_worktree, "checkout", "-b", "feature/other")
+
+        self.assertEqual(0, branch_checkout.returncode, branch_checkout.stderr)
+        self.assertFalse((target_worktree / ".env").exists())
+        self.assertFalse((target_worktree / "shared-data").is_symlink())
+
     def test_copy_symlinks_setting_preserves_included_symlinks(self) -> None:
         installer = install_hook(self.primary_worktree)
         self.assertEqual(0, installer.returncode, installer.stderr)

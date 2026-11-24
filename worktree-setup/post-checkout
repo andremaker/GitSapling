@@ -14,7 +14,13 @@ def git_output(*arguments: str) -> str:
 
 
 def main() -> int:
-    checkout_created_worktree = len(sys.argv) > 3 and sys.argv[3] == "1"
+    if len(sys.argv) < 4:
+        return 0
+
+    old_revision, _, checkout_type = sys.argv[1:4]
+    checkout_created_worktree = (
+        checkout_type == "1" and old_revision and not old_revision.strip("0")
+    )
     if not checkout_created_worktree:
         return 0
 
