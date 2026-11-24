@@ -1,0 +1,115 @@
+#!/usr/bin/env python3
+"""Install the repository's post-checkout hook into this Git worktree."""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+
+LIBRARY_DIRECTORY = Path(__file__).resolve().parent
+
+
+def git(*arguments: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(LIBRARY_DIRECTORY), *arguments],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def main() -> int:
+    repository_root_result = git("rev-parse", "--show-toplevel")
+    if repository_root_result.returncode != 0:
+        print(
+            f"worktree hook: tool directory is not inside a Git worktree: {LIBRARY_DIRECTORY}",
+            file=sys.stderr,
+        )
+        return 1
+    custom_hooks_path = git("config", "--get", "core.hooksPath")
+    if custom_hooks_path.returncode == 0:
+        print(
+            "worktree hook: core.hooksPath is already configured; refusing to override it.",
+            file=sys.stderr,
+        )
+        return 1
+
+    hooks_directory_result = git(
+        "rev-parse", "--path-format=absolute", "--git-path", "hooks"
+    )
+    if hooks_directory_result.returncode != 0:
+        print(f"worktree hook: {hooks_directory_result.stderr.strip()}", file=sys.stderr)
+        return hooks_directory_result.returncode
+
+    hooks_directory = Path(hooks_directory_result.stdout.strip())
+    hook_source = LIBRARY_DIRECTORY / "post-checkout"
+    setup_source = LIBRARY_DIRECTORY / "setup-worktree-links.py"
+    hook_destination = hooks_directory / "post-checkout"
+    setup_destination = hooks_directory / "setup-worktree-links.py"
+
+    if not hook_source.is_file() or not setup_source.is_file():
+        print(f"worktree hook: incomplete tool bundle: {LIBRARY_DIRECTORY}", file=sys.stderr)
+        return 1
+
+    if os.path.lexists(hook_destination):
+        try:
+            existing_hook_matches = hook_destination.read_bytes() == hook_source.read_bytes()
+        except OSError:
+            existing_hook_matches = False
+
+        if existing_hook_matches:
+            if os.path.lexists(setup_destination):
+                try:
+                    existing_setup_matches = setup_destination.read_bytes() == setup_source.read_bytes()
+                except OSError:
+                    existing_setup_matches = False
+
+                if not existing_setup_matches:
+                    print(
+                        f"worktree hook: refusing to replace existing helper: {setup_destination}",
+                        file=sys.stderr,
+                    )
+                    return 1
+
+                print(f"worktree hook already installed: {hook_destination}")
+                return 0
+        else:
+            print(
+                f"worktree hook: refusing to replace existing hook: {hook_destination}",
+                file=sys.stderr,
+            )
+            return 1
+
+    if os.path.lexists(setup_destination):
+        try:
+            existing_setup_matches = setup_destination.read_bytes() == setup_source.read_bytes()
+        except OSError:
+            existing_setup_matches = False
+        if not existing_setup_matches:
+            print(
+                f"worktree hook: refusing to replace existing helper: {setup_destination}",
+                file=sys.stderr,
+            )
+            return 1
+
+    try:
+        hooks_directory.mkdir(parents=True, exist_ok=True)
+        if not os.path.lexists(hook_destination):
+            shutil.copyfile(hook_source, hook_destination)
+        if not os.path.lexists(setup_destination):
+            shutil.copyfile(setup_source, setup_destination)
+        hook_destination.chmod(0o755)
+    except OSError as error:
+        print(f"worktree hook: {error}", file=sys.stderr)
+        return 1
+
+    print(f"installed worktree hook: {hook_destination}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
