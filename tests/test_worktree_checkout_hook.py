@@ -215,7 +215,6 @@ class WorktreeCheckoutHookTest(TemporaryDirectoryTestCase):
             external_copy.stderr,
         )
         self.assertIn("symlink copying is disabled", external_copy.stderr)
-
         copied_external_target = target_worktree / "external-link"
         self.assertEqual(
             "external config value\n",
@@ -224,6 +223,48 @@ class WorktreeCheckoutHookTest(TemporaryDirectoryTestCase):
         self.assertFalse(copied_external_target.is_symlink())
         self.assertFalse((target_worktree / "internal-link").exists())
         self.assertFalse((target_worktree / "internal-link").is_symlink())
+        for path in ("outside.txt", "outside-link", "outside-shared"):
+            self.assertFalse(os.path.lexists(target_worktree / path), path)
+
+    def test_missing_include_file_does_not_block_shared_links(self) -> None:
+        installer = install_hook(self.primary_worktree)
+        self.assertEqual(0, installer.returncode, installer.stderr)
+        (self.primary_worktree / ".worktreeinclude").unlink()
+
+        target_worktree = self.temporary_path / "links without include patterns"
+        worktree_add = add_detached_worktree(self.primary_worktree, target_worktree)
+
+        self.assertEqual(0, worktree_add.returncode, worktree_add.stderr)
+        self.assertTrue((target_worktree / "shared-data").is_symlink())
+        self.assertFalse((target_worktree / ".env").exists())
+
+    def test_missing_links_file_does_not_block_included_copies(self) -> None:
+        installer = install_hook(self.primary_worktree)
+        self.assertEqual(0, installer.returncode, installer.stderr)
+        (self.primary_worktree / ".worktreelinks").unlink()
+
+        target_worktree = self.temporary_path / "copies without link patterns"
+        worktree_add = add_detached_worktree(self.primary_worktree, target_worktree)
+
+        self.assertEqual(0, worktree_add.returncode, worktree_add.stderr)
+        self.assertEqual(
+            "local config\n",
+            (target_worktree / ".env").read_text(encoding="utf-8"),
+        )
+        self.assertFalse((target_worktree / "shared-data").is_symlink())
+
+    def test_missing_both_pattern_files_is_successful(self) -> None:
+        installer = install_hook(self.primary_worktree)
+        self.assertEqual(0, installer.returncode, installer.stderr)
+        (self.primary_worktree / ".worktreeinclude").unlink()
+        (self.primary_worktree / ".worktreelinks").unlink()
+
+        target_worktree = self.temporary_path / "without patterns"
+        worktree_add = add_detached_worktree(self.primary_worktree, target_worktree)
+
+        self.assertEqual(0, worktree_add.returncode, worktree_add.stderr)
+        self.assertFalse((target_worktree / ".env").exists())
+        self.assertFalse((target_worktree / "shared-data").exists())
 
     def test_installer_is_idempotent(self) -> None:
         first_install = install_hook(self.primary_worktree)

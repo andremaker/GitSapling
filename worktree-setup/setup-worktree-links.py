@@ -265,28 +265,20 @@ def main() -> int:
 
     source_root = Path(sys.argv[1]).resolve(strict=True)
     target_root = Path(sys.argv[2]).resolve(strict=True)
-    patterns_file = source_root / ".worktreelinks"
-    if not patterns_file.is_file():
-        print(f"worktree links: missing patterns file: {patterns_file}", file=sys.stderr)
-        return 1
-    include_patterns_file = source_root / ".worktreeinclude"
-    if not include_patterns_file.is_file():
-        print(
-            f"worktree includes: missing patterns file: {include_patterns_file}",
-            file=sys.stderr,
-        )
-        return 1
-
     try:
-        copy_included_paths(
-            source_root,
-            target_root,
-            include_patterns_file,
-            symlink_copy_enabled(source_root),
-            external_symlink_copy_enabled(source_root),
-        )
-        for relative_path in ignored_paths(source_root, patterns_file):
-            create_link(source_root, target_root, relative_path)
+        patterns_file = source_root / ".worktreelinks"
+        include_patterns_file = source_root / ".worktreeinclude"
+        if include_patterns_file.is_file():
+            copy_included_paths(
+                source_root,
+                target_root,
+                include_patterns_file,
+                symlink_copy_enabled(source_root),
+                external_symlink_copy_enabled(source_root),
+            )
+        if patterns_file.is_file():
+            for relative_path in ignored_paths(source_root, patterns_file):
+                create_link(source_root, target_root, relative_path)
     except (OSError, subprocess.CalledProcessError) as error:
         print(f"worktree setup: {error}", file=sys.stderr)
         return 1

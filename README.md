@@ -16,7 +16,7 @@ Requirements: Git and Python 3. The current primary-checkout lookup assumes a st
 
 ## Configure paths
 
-Create these files in the primary checkout root:
+Create either or both of these files in the primary checkout root:
 
 - `.worktreeinclude` lists ignored paths whose contents should be copied into a new worktree.
 - `.worktreelinks` lists ignored paths that should be shared through symlinks pointing back to the primary checkout.
