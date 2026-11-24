@@ -33,6 +33,7 @@ def configured_directory_paths(source_root: Path, patterns_file: Path) -> list[s
 
 
 def ignored_paths(source_root: Path, patterns_file: Path) -> list[str]:
+    # Avoid --directory: it would widen file matches to their ignored parent dirs.
     list_command = [
         "git",
         "-C",

@@ -36,7 +36,11 @@ The files use Git exclude-pattern syntax. For example:
 
 Do not list a path in both files. Copying runs first, and a path copied into the target conflicts with creating a link at that same path.
 
-Unignored paths listed in either file are skipped.
+The pattern files choose exact paths; Git ignore rules only decide whether each match
+is eligible. For example, `/.vscode/settings.json` selects that file even when its
+parent `.vscode/` is ignored. A trailing-slash pattern such as `/media/` or a
+recursive pattern such as `/cache/**` selects the directory as a unit. Unignored
+matches are skipped.
 
 ## Symlink behavior
 
@@ -46,7 +50,10 @@ By default, symlinks listed in `.worktreeinclude` are skipped with a warning. Co
 git config --local worktree.copySymlinks true
 ```
 
-This preserves the symlink itself. Absolute links are preserved as absolute links; relative links that point outside the source checkout may resolve differently from the new worktree.
+This preserves the symlink itself. It does not copy an internal target unless that
+target is selected separately. Absolute links are preserved as absolute links;
+relative links that point outside the source checkout may resolve differently from
+the new worktree.
 
 To copy the contents of absolute or outside symlink targets instead, use:
 
