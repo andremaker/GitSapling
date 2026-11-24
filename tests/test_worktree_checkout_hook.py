@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -45,10 +46,19 @@ def create_primary_worktree(temporary_path: Path) -> tuple[Path, Path, Path]:
         encoding="utf-8",
     )
     (primary_worktree / ".worktreeinclude").write_text(
-        "/.env\n/external-link\n/internal-link\n", encoding="utf-8"
+        "/.env\n/external-link\n/internal-link\n"
+        "/outside.txt\n/outside-link\n/outside-shared/**\n",
+        encoding="utf-8",
     )
-    (primary_worktree / ".worktreelinks").write_text("/shared-data/\n", encoding="utf-8")
+    (primary_worktree / ".worktreelinks").write_text(
+        "/shared-data/\n/outside-link\n/outside-shared/\n", encoding="utf-8"
+    )
     (primary_worktree / ".env").write_text("local config\n", encoding="utf-8")
+    (primary_worktree / "outside.txt").write_text("unignored outside file\n", encoding="utf-8")
+    (primary_worktree / "outside-link").symlink_to("shared-data/asset.txt")
+    outside_shared = primary_worktree / "outside-shared"
+    outside_shared.mkdir()
+    (outside_shared / "asset.txt").write_text("unignored outside shared asset\n", encoding="utf-8")
 
     shared_data = primary_worktree / "shared-data"
     shared_data.mkdir()
@@ -138,6 +148,8 @@ class WorktreeCheckoutHookTest(TemporaryDirectoryTestCase):
             "shared asset\n",
             (linked_shared_data / "asset.txt").read_text(encoding="utf-8"),
         )
+        for path in ("outside.txt", "outside-link", "outside-shared"):
+            self.assertFalse(os.path.lexists(target_worktree / path), path)
 
     def test_checkout_hook_skips_file_checkout(self) -> None:
         target_worktree = self.temporary_path / "codex worktree"
@@ -181,6 +193,8 @@ class WorktreeCheckoutHookTest(TemporaryDirectoryTestCase):
         copied_external_link = target_worktree / "external-link"
         self.assertTrue(copied_external_link.is_symlink())
         self.assertEqual(str(self.external_target), str(copied_external_link.readlink()))
+        for path in ("outside.txt", "outside-link", "outside-shared"):
+            self.assertFalse(os.path.lexists(target_worktree / path), path)
 
     def test_copy_external_symlink_targets_setting_copies_target_contents(self) -> None:
         installer = install_hook(self.primary_worktree)

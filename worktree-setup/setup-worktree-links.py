@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 def ignored_paths(source_root: Path, patterns_file: Path) -> list[str]:
-    command = [
+    list_command = [
         "git",
         "-C",
         str(source_root),
@@ -22,8 +22,50 @@ def ignored_paths(source_root: Path, patterns_file: Path) -> list[str]:
         "-z",
         f"--exclude-from={patterns_file}",
     ]
-    output = subprocess.check_output(command)
-    return [path.decode() for path in output.split(b"\0") if path]
+    output = subprocess.check_output(list_command)
+    candidates = [os.fsdecode(path) for path in output.split(b"\0") if path]
+    if not candidates:
+        return []
+
+    check_command = [
+        "git",
+        "-C",
+        str(source_root),
+        "check-ignore",
+        "--no-index",
+        "--stdin",
+        "-z",
+    ]
+    result = subprocess.run(
+        check_command,
+        input=b"\0".join(os.fsencode(path) for path in candidates) + b"\0",
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode not in (0, 1):
+        raise subprocess.CalledProcessError(
+            result.returncode,
+            check_command,
+            output=result.stdout,
+            stderr=result.stderr,
+        )
+
+    ignored = {os.fsdecode(path) for path in result.stdout.split(b"\0") if path}
+    matching = [path for path in candidates if path in ignored]
+    matching.sort(key=lambda path: path.rstrip("/").count("/"))
+
+    selected = []
+    selected_paths = []
+    for path in matching:
+        normalized_path = path.rstrip("/")
+        if any(
+            normalized_path == parent or normalized_path.startswith(f"{parent}/")
+            for parent in selected_paths
+        ):
+            continue
+        selected.append(path)
+        selected_paths.append(normalized_path)
+    return selected
 
 
 def is_within(path: Path, root: Path) -> bool:

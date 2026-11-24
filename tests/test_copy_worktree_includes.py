@@ -24,6 +24,48 @@ SPEC.loader.exec_module(copier)
 
 
 class CopyWorktreeIncludesTest(unittest.TestCase):
+    def test_does_not_copy_unignored_path_matching_include_pattern(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="wt-") as temporary_directory:
+            temporary_path = Path(temporary_directory)
+            source_root = temporary_path / "source"
+            target_root = temporary_path / "target"
+            source_root.mkdir()
+            target_root.mkdir()
+
+            (source_root / ".gitignore").write_text(
+                "/ignored.txt\n/sandbox\n", encoding="utf-8"
+            )
+            (source_root / "ignored.txt").write_text("ignored value\n", encoding="utf-8")
+            (source_root / "plain.txt").write_text("plain value\n", encoding="utf-8")
+            (source_root / "plain-link").symlink_to("ignored.txt")
+            sandbox = source_root / "sandbox"
+            sandbox.mkdir()
+            (sandbox / "copied.txt").write_text("sandbox value\n", encoding="utf-8")
+            (sandbox / "copied-link").symlink_to("copied.txt")
+            (sandbox / "unlisted.txt").write_text("unlisted sandbox value\n", encoding="utf-8")
+            patterns_file = source_root / ".worktreeinclude"
+            patterns_file.write_text(
+                "/ignored.txt\n/sandbox/copied.txt\n/sandbox/copied-link\n"
+                "/plain.txt\n/plain-link\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "init", str(source_root)], check=True, capture_output=True)
+
+            paths = copier.ignored_paths(source_root, patterns_file)
+            copier.copy_included_paths(source_root, target_root, patterns_file, copy_symlinks=True)
+
+            self.assertCountEqual(
+                ["ignored.txt", "sandbox/copied.txt", "sandbox/copied-link"],
+                paths,
+            )
+            self.assertEqual("ignored value\n", (target_root / "ignored.txt").read_text(encoding="utf-8"))
+            self.assertEqual("sandbox value\n", (target_root / "sandbox/copied.txt").read_text(encoding="utf-8"))
+            self.assertTrue((target_root / "sandbox/copied-link").is_symlink())
+            self.assertEqual("copied.txt", os.readlink(target_root / "sandbox/copied-link"))
+            self.assertFalse((target_root / "sandbox/unlisted.txt").exists())
+            self.assertFalse((target_root / "plain.txt").exists())
+            self.assertFalse(os.path.lexists(target_root / "plain-link"))
+
     def test_copies_relative_symlink_resolving_inside_source_worktree(self) -> None:
         with tempfile.TemporaryDirectory(prefix="wt-") as temporary_directory:
             temporary_path = Path(temporary_directory)

@@ -1,6 +1,6 @@
 # GitSapling
 
-GitSapling prepares new linked worktrees by copying selected ignored files and linking shared paths from an existing checkout.
+GitSapling prepares new linked worktrees by copying selected ignored files and linking shared paths from an existing checkout. Paths matched by the configuration are used only when Git also considers them ignored.
 
 ## Install
 
@@ -35,6 +35,8 @@ The files use Git exclude-pattern syntax. For example:
 ```
 
 Do not list a path in both files. Copying runs first, and a path copied into the target conflicts with creating a link at that same path.
+
+Unignored paths listed in either file are skipped.
 
 ## Symlink behavior
 
