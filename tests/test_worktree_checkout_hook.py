@@ -117,6 +117,7 @@ class WorktreeCheckoutHookTest(TemporaryDirectoryTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.primary_worktree, self.shared_data, self.external_target = create_primary_worktree(self.temporary_path)
+        git(self.primary_worktree, "config", "--local", "worktree.copyIncludes", "true")
 
     def test_post_checkout_hook_sets_up_detached_worktree(self) -> None:
         target_worktree = self.temporary_path / "codex worktree"
@@ -255,6 +256,62 @@ class WorktreeCheckoutHookTest(TemporaryDirectoryTestCase):
         self.assertFalse((target_worktree / "internal-link").is_symlink())
         for path in ("outside.txt", "outside-link", "outside-shared"):
             self.assertFalse(os.path.lexists(target_worktree / path), path)
+
+    def test_included_copy_takes_precedence_over_overlapping_link(self) -> None:
+        installer = install_hook(self.primary_worktree)
+        self.assertEqual(0, installer.returncode, installer.stderr)
+        include_patterns = self.primary_worktree / ".worktreeinclude"
+        include_patterns.write_text(
+            include_patterns.read_text(encoding="utf-8") + "/shared-data/asset.txt\n",
+            encoding="utf-8",
+        )
+
+        target_worktree = self.temporary_path / "copy takes precedence over link"
+        worktree_add = add_detached_worktree(self.primary_worktree, target_worktree)
+
+        self.assertEqual(0, worktree_add.returncode, worktree_add.stderr)
+        copied_directory = target_worktree / "shared-data"
+        self.assertTrue(copied_directory.is_dir())
+        self.assertFalse(copied_directory.is_symlink())
+        self.assertEqual(
+            "shared asset\n",
+            (copied_directory / "asset.txt").read_text(encoding="utf-8"),
+        )
+
+    def test_include_matches_are_excluded_from_links_when_copying_is_disabled(self) -> None:
+        installer = install_hook(self.primary_worktree)
+        self.assertEqual(0, installer.returncode, installer.stderr)
+        
+        git(self.primary_worktree, "config", "--local", "--unset", "worktree.copyIncludes")
+        include_patterns = self.primary_worktree / ".worktreeinclude"
+        include_patterns.write_text(
+            include_patterns.read_text(encoding="utf-8") + "/shared-data/asset.txt\n",
+            encoding="utf-8",
+        )
+
+        target_worktree = self.temporary_path / "links without include copies"
+        worktree_add = add_detached_worktree(self.primary_worktree, target_worktree)
+
+        self.assertEqual(0, worktree_add.returncode, worktree_add.stderr)
+        self.assertFalse((target_worktree / ".env").exists())
+        self.assertFalse((target_worktree / "shared-data").exists())
+        self.assertFalse((target_worktree / "shared-data").is_symlink())
+        self.assertTrue((target_worktree / ".vscode/settings.json").is_symlink())
+
+    def test_include_pattern_excludes_skipped_symlink_from_links(self) -> None:
+        installer = install_hook(self.primary_worktree)
+        self.assertEqual(0, installer.returncode, installer.stderr)
+        link_patterns = self.primary_worktree / ".worktreelinks"
+        link_patterns.write_text(
+            link_patterns.read_text(encoding="utf-8") + "/internal-link\n",
+            encoding="utf-8",
+        )
+
+        target_worktree = self.temporary_path / "skipped include link"
+        worktree_add = add_detached_worktree(self.primary_worktree, target_worktree)
+
+        self.assertEqual(0, worktree_add.returncode, worktree_add.stderr)
+        self.assertFalse(os.path.lexists(target_worktree / "internal-link"))
 
     def test_missing_include_file_does_not_block_shared_links(self) -> None:
         installer = install_hook(self.primary_worktree)

@@ -92,6 +92,16 @@ def ignored_paths(source_root: Path, patterns_file: Path) -> list[str]:
     return selected
 
 
+def paths_overlap(first_path: str, second_path: str) -> bool:
+    first = first_path.rstrip("/")
+    second = second_path.rstrip("/")
+    return (
+        first == second
+        or first.startswith(f"{second}/")
+        or second.startswith(f"{first}/")
+    )
+
+
 def is_within(path: Path, root: Path) -> bool:
     try:
         path.relative_to(root)
@@ -210,12 +220,15 @@ def copy_included_paths(
     patterns_file: Path,
     copy_symlinks: bool = False,
     copy_external_symlink_targets: bool = False,
+    selected_paths: list[str] | None = None,
 ) -> None:
-    for relative_path in ignored_paths(source_root, patterns_file):
-        relative_path = relative_path.rstrip("/")
+    if selected_paths is None:
+        selected_paths = ignored_paths(source_root, patterns_file)
+    for relative_path in selected_paths:
+        normalized_path = relative_path.rstrip("/")
         copy_included_entry(
-            source_root / relative_path,
-            target_root / relative_path,
+            source_root / normalized_path,
+            target_root / normalized_path,
             source_root,
             copy_symlinks,
             copy_external_symlink_targets,
@@ -243,12 +256,16 @@ def git_bool_config(source_root: Path, key: str) -> bool:
     return result.stdout.strip() == "true"
 
 
-def external_symlink_copy_enabled(source_root: Path) -> bool:
-    return git_bool_config(source_root, "worktree.copyExternalSymlinkTargets")
+def copy_enabled(source_root: Path) -> bool:
+    return git_bool_config(source_root, "worktree.copyIncludes")
 
 
 def symlink_copy_enabled(source_root: Path) -> bool:
     return git_bool_config(source_root, "worktree.copySymlinks")
+
+
+def external_symlink_copy_enabled(source_root: Path) -> bool:
+    return git_bool_config(source_root, "worktree.copyExternalSymlinkTargets")
 
 
 def existing_source_path(source_path: Path) -> bool:
@@ -292,16 +309,26 @@ def main() -> int:
     try:
         patterns_file = source_root / ".worktreelinks"
         include_patterns_file = source_root / ".worktreeinclude"
+        included_paths = []
         if include_patterns_file.is_file():
-            copy_included_paths(
-                source_root,
-                target_root,
-                include_patterns_file,
-                symlink_copy_enabled(source_root),
-                external_symlink_copy_enabled(source_root),
-            )
+            included_paths = ignored_paths(source_root, include_patterns_file)
+            if copy_enabled(source_root):
+                copy_included_paths(
+                    source_root,
+                    target_root,
+                    include_patterns_file,
+                    symlink_copy_enabled(source_root),
+                    external_symlink_copy_enabled(source_root),
+                    selected_paths=included_paths,
+                )
         if patterns_file.is_file():
             for relative_path in ignored_paths(source_root, patterns_file):
+                # Include matches are excluded from links regardless of who copies them.
+                if any(
+                    paths_overlap(relative_path, included_path)
+                    for included_path in included_paths
+                ):
+                    continue
                 create_link(source_root, target_root, relative_path)
     except (OSError, subprocess.CalledProcessError) as error:
         print(f"worktree setup: {error}", file=sys.stderr)

@@ -10,7 +10,7 @@ After installation, GitSapling runs when you create a linked worktree with `git 
 
 GitSapling uses the same Git-style pattern matching and ignore checks for both files. Paths selected by `.worktreeinclude` are excluded from `.worktreelinks`, whether copying is enabled or not. Paths Git does not consider ignored in the primary checkout are skipped.
 
-`.worktreeinclude` copying is disabled by default to avoid duplicating support provided by your worktree tool. This setting controls only whether GitSapling performs the copy; it does not change which paths `.worktreelinks` excludes. To enable copying for a tool without native support, run:
+`.worktreeinclude` copying is disabled by default to avoid duplicating support provided by other worktree tools like Claude or Codex. To enable copying for a tool without native support, run:
 
 ```sh
 git config --local worktree.copyIncludes true
